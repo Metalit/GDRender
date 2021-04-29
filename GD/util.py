@@ -78,7 +78,7 @@ def rot_around(point, center, angle, degrees=False)->"tuple[int, int]":
 
     qx = ox + math.cos(angle) * (px - ox) - math.sin(angle) * (py - oy)
     qy = oy + math.sin(angle) * (px - ox) + math.cos(angle) * (py - oy)
-    return qx, qy
+    return [qx, qy]
 
 def translate(point, by_line):
     """Moves the point along the distance and direction specified by the line."""

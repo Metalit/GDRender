@@ -1,5 +1,6 @@
 # pyclipper has weird syntax
 # https://sourceforge.net/p/jsclipper/wiki/documentation/
+from base_shapes import Square
 from copy import deepcopy
 import pyclipper as pc
 from visualize import *
@@ -267,36 +268,34 @@ def inside(point, polygon)->"bool":
     """Returns if a point is inside a polygon."""
     return not pc.PointInPolygon(pc.scale_to_clipper(point), pc.scale_to_clipper(polygon)) == 0
 
-def offset_of_type(square_side_length, point1, point2, point3, type, miter_points=None)->"float":
+def offset_of_type(square_side_length, point1, point2, point3, type, mit_p2=None, reverse=False)->"float":
     """Finds the offset from a miter that a shape would require to fit in the corner made by the given three points.
     
     The points must be in clockwise order around the polygon."""
-    if not miter_points: miter_points = [point1, point2, point3]; extra_dist = 0
-    else:
-        i = intersection([point3, translate(miter_points[2], [miter_points[1], point3])], [point1, point2])
-        if not i: miter_points = [point1, point2, point3]; extra_dist = 0
-        else: extra_dist = math.dist(i, point2)
-    # angle >= 90
-    if not angle_leq(point1, point2, point3, 89.999, degrees=True): return -extra_dist
     # rotate around p2 such that p1-p2 line is horizontal
     a = angle(point1, point2)
-    point1, point2, point3, *miter_points = [rot_around(p, point2, -a) for p in [point1,point2,point3]+miter_points]
-    # find slope of p2-p3 line, flipping on y axis if necessary
-    slope = abs((point3[1] - point2[1]) / (point3[0] - point2[0]))
-    # evil geometry math that I calculated in like two hours with two attempts
-    ret = (square_side_length/(slope*2))*(slope+1-math.sqrt(slope*slope+1))
-    # slight bit of breathing room for calculations
-    ret += 1/100000
-    # adjust for type
-    # find the x value that the corner of a regular miter would be at
-    mit_x = point2[0] - square_side_length/(2*math.tan( (angle(miter_points[1], miter_points[2]) + math.pi)/2 )) + extra_dist
-    # find the difference between it and the x value a triangle could be at
-    off = mit_x - (point2[0] - square_side_length/2)
-    if type == "triangle":
-        ret = max(ret - square_side_length, off)
+    point1, point2, point3 = [rot_around(p, point2, -a) for p in [point1,point2,point3]]
+    if reverse: point3[1] = -point3[1]
+    if mit_p2: mit_p2 = rot_around(mit_p2, point2, -a)
+    # find the angle difference of p2-p1 and p2-p3
+    angle_dif = angle(point2, point3) + math.pi
+    # find the x value that the offset is from if not given
+    if mit_p2: mit_x = mit_p2[0]
+    else: mit_x = point2[0] - square_side_length/(2*math.tan(angle_dif/2))
+    # find the x value if aligned touching the corner
+    align_x = point2[0] - square_side_length/2
+    # x value of the edge of a square in the corner
+    line_x = point2[0] - square_side_length/math.tan(angle_dif)
     if type == "sharp_triangle":
-        ret = max(ret - square_side_length*2, off) + square_side_length/2 # wider than a sqaure but not taller
-    return ret
+        if angle_dif >= math.pi/8: return mit_x - align_x + square_side_length/2
+        return mit_x - (line_x + square_side_length)
+    elif type == "triangle":
+        if angle_dif >= math.pi/4: return mit_x - align_x
+        return mit_x - (line_x + square_side_length/2)
+    elif type == "square":
+        if angle_dif >= math.pi/2: return mit_x - align_x
+        return mit_x - (line_x - square_side_length/2)
+    else: return 0
 
 def miter_edge(polygon, square_side_length, edge_index):
     """Returns one edge of a miter."""
@@ -336,17 +335,14 @@ def offset_miter_edge(polygon, square_side_length, edge_index, type, flip=False)
     if not mit: return None
     # get the points on mit around the line
     p1, p2, p3, p4 = mit[line_index-3], mit[line_index-2], mit[line_index-1], mit[line_index]
+    # get the points on the polygon around the line
+    o_p1, o_p2, o_p3, o_p4 = polygon[edge_index-2], polygon[edge_index-1], polygon[edge_index], polygon[(edge_index+1)%len(polygon)]
     # find the pointy side of the triangle and set the other side to find the offset like a square
     type1, type2 = type if flip else "square", type if not flip else "square"
     # get offsets
-    off1, off2 = offset_of_type(square_side_length, p1, p2, p3, type1), offset_of_type(square_side_length, p2, p3, p4, type2)
-    # get the points on the original polygon around the line for offsetting triangles
-    o_p1, o_p2, o_p3, o_p4 = polygon[edge_index-2], polygon[edge_index-1], polygon[edge_index], polygon[(edge_index+1)%len(polygon)]
-    # check if triangle goes over the end of an edge that was cut off in the miter
-    if (type1 == "triangle" or type1 == "sharp_triangle") and off1 < 0 and not close_enough(angle(p1, p2), angle(o_p1, o_p2)):
-        off1 = offset_of_type(square_side_length, o_p1, o_p2, o_p3, type1, miter_points=[p1, p2, p3])
-    if (type2 == "triangle" or type2 == "sharp_triangle") and off2 < 0 and not close_enough(angle(p3, p4), angle(o_p3, o_p4)):
-        off2 = offset_of_type(square_side_length, o_p2, o_p3, o_p4, type2, miter_points=[p2, p3, p4])
+    off1, off2 = offset_of_type(square_side_length, o_p3, o_p2, o_p1, type1, p2, True), offset_of_type(square_side_length, o_p2, o_p3, o_p4, type2, p3)
+    mit_off1, mit_off2 = offset_of_type(square_side_length, p1, p2, p3, type1), offset_of_type(square_side_length, p2, p3, p4, type2)
+    off1 = max(off1, mit_off1); off2 = max(off2, mit_off2)
     # adjust for extra length if the shape is a sharp triangle
     if type1 == "sharp_triangle" and angle_leq(p2, p3, p4): off2 += square_side_length/2
     if type2 == "sharp_triangle" and angle_leq(p1, p2, p3): off1 += square_side_length/2
@@ -393,17 +389,18 @@ if __name__ == "__main__":
     shape = [[140.0, 118.0], [164.0, 216.0], [225.0, 201.0], [196.34718213928863, 127.98152867751196], [195.6669565429911, 137.16457422962412], [180.7079402259551, 136.05649894708768], [181.81601550849155, 121.09748263005167]]
     #shape = [[10, 1], [9, 7], [7, 7], [6, 3], [5, 7], [3, 7], [2, 1]]
     shape = [[6, 5], [5, 10], [10, 10], [12, 5]]
-    shape = [[2, 2], [9, 2], [7, 7], [2.1, 3]]
+    #shape = [[2, 2], [9, 2], [7, 7], [2.1, 3]]
     shape = [[3, 2], [2.5, 3], [7, 5], [9, 2]][::-1]
     polygons, edges = straight_skeleton(shape)
     img = Img(2048)
     scale = 128
     shape = pc.scale_to_clipper(shape, scale)
     img.draw_polygon(shape, width=5, outline=[0,0,0])
-    l = offset_miter_edge(shape, 128*2, 3, "triangle")
+    l = offset_miter_edge(shape, 128*2, 1, "triangle", True)
     img.draw_line(l)
-    from base_shapes import shape_at, Triangle
-    img.draw_polygon(shape_at(Triangle, 256, l[1], 0, False))
+    from base_shapes import *
+    img.draw_polygon(shape_at(Triangle, 256, l[0], angle(shape[1], shape[2]), True))
+    img.draw_polygon(shape_at(Triangle, 256, l[1], angle(shape[1], shape[2]), True))
     #p = offset_miter(shape, 256)
     #img.draw_polygon(p)
     for p in polygons:
