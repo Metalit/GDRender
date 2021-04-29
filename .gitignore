@@ -1,2 +1,4 @@
-.vscode/
-__pycache__/
+
+GD/.vscode/
+
+GD/__pycache__/
