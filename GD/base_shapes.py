@@ -1,5 +1,5 @@
 from create import *
-from clipper import rot_around
+from util import rot_around
 from copy import deepcopy
 import math
 
@@ -83,9 +83,9 @@ class Square(Shape):
     
     base_corners = [[-2.5, -2.5], [2.5, -2.5], [2.5, 2.5], [-2.5, 2.5]] # corners with center at 0, 0
 
-    def __init__(self, center: "tuple[int, int]", side_length, color, group):
+    def __init__(self, center: "tuple[int, int]", side_length, color: int, group: "list[int]"):
         super().__init__(center, side_length, color, group)
-        self.string = solid_object(211, center, scale=one_block/side_length, color=color, groups=group)
+        self.string = solid_object(211, center, scale=one_block/side_length, color=color, groups=[1, group])
         self.type = "square"
 
 def shape_at(shape, side_length, pos, rot, flip=None):
