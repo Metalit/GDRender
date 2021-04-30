@@ -1,4 +1,3 @@
-from scipy.linalg.special_matrices import tri
 from base_shapes import *
 from scipy.optimize import minimize, curve_fit
 from clipper import *
@@ -8,90 +7,73 @@ from visualize import *
 def find_corner_triangles(start_corners, end_corners):
     s_triangles = [[] for _ in start_corners]; e_triangles = [[] for _ in start_corners] # each element is the two triangles for the corresponding corner
     # triangle: type, side_length, position, rotation, flip
-    for i, p3 in enumerate(start_corners):
-        p1, p2 = start_corners[i-2], start_corners[i-1]
-        if angle_leq(p1, p2, p3, 22.4999, degrees=True): # needs smallest triangle
+    for i, (s_p3, e_p3) in enumerate(zip(start_corners, end_corners)):
+        s_p1, s_p2 = start_corners[i-2], start_corners[i-1]
+        e_p1, e_p2 = end_corners[i-2], end_corners[i-1]
+        if angle_leq(s_p1, s_p2, s_p3, 22.4999, degrees=True) or angle_leq(e_p1, e_p2, e_p3, 22.4999, degrees=True): # needs smallest triangle
             # find placement for triangle
-            off_e1 = offset_miter_edge(start_corners, smallest_scale, (i-1)%len(start_corners), "sharp_triangle")
-            off_e2 = offset_miter_edge(start_corners, smallest_scale, i, "sharp_triangle", True)
+            s_off_e1 = offset_miter_edge(start_corners, smallest_scale, (i-1)%len(start_corners), "sharp_triangle")
+            s_off_e2 = offset_miter_edge(start_corners, smallest_scale, i, "sharp_triangle", True)
+            e_off_e1 = offset_miter_edge(end_corners, smallest_scale, (i-1)%len(end_corners), "sharp_triangle")
+            e_off_e2 = offset_miter_edge(end_corners, smallest_scale, i, "sharp_triangle", True)
             # shape is too small
-            if not off_e1 or not off_e2: return False
+            if not s_off_e1 or not s_off_e2: return False
+            if not e_off_e1 or not e_off_e2: return False
             # add to list
-            s_triangles[i-1].append(["sharp_triangle", smallest_scale, off_e1[1], angle(off_e1[1], off_e1[0]), False])
-            s_triangles[i-1].append(["sharp_triangle", smallest_scale, off_e2[0], angle(off_e2[1], off_e2[0]), True])
+            s_triangles[i-1].append(["sharp_triangle", smallest_scale, s_off_e1[1], angle(s_off_e1[1], s_off_e1[0]), False])
+            s_triangles[i-1].append(["sharp_triangle", smallest_scale, s_off_e2[0], angle(s_off_e2[1], s_off_e2[0]), True])
+            e_triangles[i-1].append(["sharp_triangle", smallest_scale, e_off_e1[1], angle(e_off_e1[1], e_off_e1[0]), False])
+            e_triangles[i-1].append(["sharp_triangle", smallest_scale, e_off_e2[0], angle(e_off_e2[1], e_off_e2[0]), True])
             continue
-        elif angle_leq(p1, p2, p3, 44.999, degrees=True): # largest sharp triangle necessary
+        elif angle_leq(s_p1, s_p2, s_p3, 44.999, degrees=True) or angle_leq(e_p1, e_p2, e_p3, 44.999, degrees=True): # largest sharp triangle necessary
             type = "sharp_triangle"
-        elif angle_leq(p1, p2, p3, 89.999, degrees=True): # largest regular triangle necessary
+        elif angle_leq(s_p1, s_p2, s_p3, 89.999, degrees=True) or angle_leq(e_p1, e_p2, e_p3, 89.999, degrees=True): # largest regular triangle necessary
             type = "triangle"
         else: continue # no triangles necessary
         # prime with smallest triangles
-        off_e1 = []; t_off_e1 = offset_miter_edge(start_corners, smallest_scale, (i-1)%len(start_corners), type)
-        off_e2 = []; t_off_e2 = offset_miter_edge(start_corners, smallest_scale, i, type, True)
+        s_off_e1 = []; t_s_off_e1 = offset_miter_edge(start_corners, smallest_scale, (i-1)%len(start_corners), type)
+        s_off_e2 = []; t_s_off_e2 = offset_miter_edge(start_corners, smallest_scale, i, type, True)
+        e_off_e1 = []; t_e_off_e1 = offset_miter_edge(end_corners, smallest_scale, (i-1)%len(end_corners), type)
+        e_off_e2 = []; t_e_off_e2 = offset_miter_edge(end_corners, smallest_scale, i, type, True)
         # shape is too small
-        if not t_off_e1 or not t_off_e2: return False
+        if not t_s_off_e1 or not t_s_off_e2: return False
+        if not t_e_off_e1 or not t_e_off_e2: return False
         # find largest triangle for first edge
         mult = 1
-        while t_off_e1:
-            off_e1 = t_off_e1; mult *= 2
-            t_off_e1 = offset_miter_edge(start_corners, smallest_scale*mult, (i-1)%len(start_corners), type)
+        while t_s_off_e1 and t_e_off_e1:
+            mult *= 2
+            s_off_e1 = t_s_off_e1
+            t_s_off_e1 = offset_miter_edge(start_corners, smallest_scale*mult, (i-1)%len(start_corners), type)
+            e_off_e1 = t_e_off_e1
+            t_e_off_e1 = offset_miter_edge(end_corners, smallest_scale*mult, (i-1)%len(end_corners), type)
         mult /= 2
-        s_triangles[i-1].append([type, smallest_scale*mult, off_e1[1], angle(off_e1[1], off_e1[0]), False])
+        s_triangles[i-1].append([type, smallest_scale*mult, s_off_e1[1], angle(s_off_e1[1], s_off_e1[0]), False])
+        e_triangles[i-1].append([type, smallest_scale*mult, e_off_e1[1], angle(e_off_e1[1], e_off_e1[0]), False])
         # find largest triangle for second edge
         mult = 1
-        while t_off_e2:
-            off_e2 = t_off_e2; mult *= 2
-            t_off_e2 = offset_miter_edge(start_corners, smallest_scale*mult, i, type, True)
+        while t_s_off_e2 and t_e_off_e2:
+            mult *= 2
+            s_off_e2 = t_s_off_e2
+            t_s_off_e2 = offset_miter_edge(start_corners, smallest_scale*mult, i, type, True)
+            e_off_e2 = t_e_off_e2
+            t_e_off_e2 = offset_miter_edge(end_corners, smallest_scale*mult, i, type, True)
         mult /= 2
-        s_triangles[i-1].append([type, smallest_scale*mult, off_e2[0], angle(off_e2[1], off_e2[0]), True])
-    # ungodly repeated code that I might need to find a better way to structure but meh
-    for i, p3 in enumerate(end_corners):
-        p1, p2 = end_corners[i-2], end_corners[i-1]
-        if angle_leq(p1, p2, p3, 22.4999, degrees=True): # needs smallest triangle
-            # find placement for triangle
-            off_e1 = offset_miter_edge(end_corners, smallest_scale, (i-1)%len(end_corners), "sharp_triangle")
-            off_e2 = offset_miter_edge(end_corners, smallest_scale, i, "sharp_triangle", True)
-            # shape is too small
-            if not off_e1 or not off_e2: return False
-            # add to list
-            e_triangles[i-1].append(["sharp_triangle", smallest_scale, off_e1[1], angle(off_e1[1], off_e1[0]), False])
-            e_triangles[i-1].append(["sharp_triangle", smallest_scale, off_e2[0], angle(off_e2[1], off_e2[0]), True])
-            continue
-        elif angle_leq(p1, p2, p3, 44.999, degrees=True): # largest sharp triangle necessary
-            type = "sharp_triangle"
-        elif angle_leq(p1, p2, p3, 89.999, degrees=True): # largest regular triangle necessary
-            type = "triangle"
-        else: continue # no triangles necessary
-        # prime with smallest triangles
-        off_e1 = []; t_off_e1 = offset_miter_edge(end_corners, smallest_scale, (i-1)%len(end_corners), type)
-        off_e2 = []; t_off_e2 = offset_miter_edge(end_corners, smallest_scale, i, type, True)
-        # shape is too small
-        if not t_off_e1 or not t_off_e2: return False
-        # find largest triangle for first edge
-        mult = 1
-        while t_off_e1:
-            off_e1 = t_off_e1; mult *= 2
-            t_off_e1 = offset_miter_edge(end_corners, smallest_scale*mult, (i-1)%len(end_corners), type)
-        mult /= 2
-        e_triangles[i-1].append([type, smallest_scale*mult, off_e1[1], angle(off_e1[1], off_e1[0]), False])
-        # find largest triangle for second edge
-        mult = 1
-        while t_off_e2:
-            off_e2 = t_off_e2; mult *= 2
-            t_off_e2 = offset_miter_edge(end_corners, smallest_scale*mult, i, type, True)
-        mult /= 2
-        e_triangles[i-1].append([type, smallest_scale*mult, off_e2[0], angle(off_e2[1], off_e2[0]), True])
+        s_triangles[i-1].append([type, smallest_scale*mult, s_off_e2[0], angle(s_off_e2[1], s_off_e2[0]), True])
+        e_triangles[i-1].append([type, smallest_scale*mult, e_off_e2[0], angle(e_off_e2[1], e_off_e2[0]), True])
     return s_triangles, e_triangles
 
 def weird_crop(line, outer_line, offsets, max_dist): # helper for find_edge_placement
     newline = deepcopy(line)
+    if sum(offsets) >= math.dist(outer_line[0], outer_line[1]) - 1/10000: return False
     # first points of edges
     d = line[0][0] - (outer_line[0][0] + offsets[0])
     if d < 0: newline[0][0] = outer_line[0][0] + offsets[0]
-    elif d > max_dist: return False
+    elif d > max_dist + 1/10000: return False
     # last points of edges
     d = (outer_line[1][0] - offsets[1]) - line[1][0]
     if d < 0: newline[1][0] = outer_line[1][0] - offsets[1]
+    # make sure some edge is left
+    if newline[1][0] - newline[0][0] < 1/10000: return False
     # don't check for max distance on end edge because it wouldn't be placed there
     return newline
 
@@ -108,46 +90,46 @@ def find_edge_placement(start_corners, end_corners, edge_index, start_offs, end_
     for p in end_corners:
         rot_end_corners.append(rot_around(p, end_corner_edge[0], -end_angle))
     # update corner edges
-    start_corner_edge, end_corner_edge = [start_corners[edge_index-1], start_corners[edge_index]], [end_corners[edge_index-1], end_corners[edge_index]]
+    start_corner_edge, end_corner_edge = [rot_start_corners[edge_index-1], rot_start_corners[edge_index]], [rot_end_corners[edge_index-1], rot_end_corners[edge_index]]
     # find largest square that fits in both
-    start_edge = offset_miter_edge(rot_start_corners, smallest_scale, edge_index, "square")
-    end_edge = offset_miter_edge(rot_end_corners, smallest_scale, edge_index, "square")
+    t_start_edge = offset_miter_edge(rot_start_corners, smallest_scale, edge_index, "square")
+    t_end_edge = offset_miter_edge(rot_end_corners, smallest_scale, edge_index, "square")
     # no space for anything
-    if not start_edge or not end_edge: return False
+    if not t_start_edge or not t_end_edge: return False
     # crop miter edges based on filled area
-    start_edge = weird_crop(start_edge, start_corner_edge, start_offs, smallest_scale/2)
-    end_edge = weird_crop(end_edge, end_corner_edge, end_offs, smallest_scale/2)
-    # ensure that endpoints are close enough
-    if not start_edge or not end_edge: return False
-    # set temp values that avoid double calculation
-    t_start_edge = start_edge
-    t_end_edge = end_edge
+    t_start_edge = weird_crop(t_start_edge, start_corner_edge, start_offs, smallest_scale/2)
+    t_end_edge = weird_crop(t_end_edge, end_corner_edge, end_offs, smallest_scale/2)
+    # check if edge is filled up already
+    if not t_start_edge and not t_end_edge: return False
     # increase square size up until no space is left
     mult = 1
-    while t_start_edge or t_end_edge:
+    starting_loop = True; s_miter = True; e_miter = True
+    while starting_loop or (s_miter and e_miter and (t_start_edge or t_end_edge)):
+        starting_loop = False
         mult *= 2
         # set prevous size fits
         start_edge = t_start_edge
         end_edge = t_end_edge
-        t_start_edge = offset_miter_edge(start_corners, smallest_scale*mult, edge_index, "square")
-        t_end_edge = offset_miter_edge(end_corners, smallest_scale*mult, edge_index, "square")
+        t_start_edge = offset_miter_edge(rot_start_corners, smallest_scale*mult, edge_index, "square"); s_miter = t_start_edge
+        t_end_edge = offset_miter_edge(rot_end_corners, smallest_scale*mult, edge_index, "square"); e_miter = t_end_edge
         # crop miter edges based on filled area
         if t_start_edge: t_start_edge = weird_crop(t_start_edge, start_corner_edge, start_offs, smallest_scale*mult/2)
         if t_end_edge: t_end_edge = weird_crop(t_end_edge, end_corner_edge, end_offs, smallest_scale*mult/2)
     mult /= 2
     # find placement position if an edge is filled
-    if not start_edge: start_edge = [offset_miter_edge(start_corners, smallest_scale*mult, edge_index, "square")[1]]*2
-    if not end_edge: end_edge = [offset_miter_edge(end_corners, smallest_scale*mult, edge_index, "square")[1]]*2
+    if not start_edge: start_edge = [offset_miter_edge(rot_start_corners, smallest_scale*mult, edge_index, "square")[1]]*2
+    if not end_edge: end_edge = [offset_miter_edge(rot_end_corners, smallest_scale*mult, edge_index, "square")[1]]*2
     # find farthest (so most filled area) placement for each side
-    start_low_x = min(start_corner_edge[0][0] + smallest_scale*mult + start_offs[0], start_edge[1][0])
-    end_low_x = min(end_corner_edge[0][0] + smallest_scale*mult + end_offs[0], end_edge[1][0])
+    # min of ideal farthest x value and calculated maximum x value
+    start_low_x = min(start_corner_edge[0][0] + smallest_scale*mult/2 + start_offs[0], start_edge[1][0])
+    end_low_x = min(end_corner_edge[0][0] + smallest_scale*mult/2 + end_offs[0], end_edge[1][0])
     # turn everything into values to be returned
-    new_s_off = start_low_x + smallest_scale*mult - start_corner_edge[0][0]
-    new_e_off = end_low_x + smallest_scale*mult - end_corner_edge[0][0]
+    new_s_off0 = start_low_x + smallest_scale*mult/2 - start_corner_edge[0][0]
+    new_e_off0 = end_low_x + smallest_scale*mult/2 - end_corner_edge[0][0]
     start_pos = rot_around([start_low_x, start_edge[0][1]], start_corner_edge[0], start_angle)
     end_pos = rot_around([end_low_x, end_edge[0][1]], end_corner_edge[0], end_angle)
     # return placements and new offsets
-    return start_pos, end_pos, [new_s_off, start_offs[1]], [new_e_off, end_offs[1]]
+    return mult, start_pos, end_pos, [new_s_off0, start_offs[1]], [new_e_off0, end_offs[1]]
 
 def area_for_minimize(position, *args):
     """Gives the area of the intersection of a shape at a given position and rotation and another.
@@ -280,35 +262,35 @@ def find_shapes(start_corners, end_corners):
     for i, triangles in enumerate(s_triangles):
         if not triangles: continue
         if triangles[0][0] == "triangle":
-            triangle = triangles[0]
-            shapes.append(shape_at(Triangle, triangle[1], triangle[2], triangle[3], triangle[4]))
-            start_offs_s[i-1][1] = triangle[1]
-            triangle = triangles[1]
-            shapes.append(shape_at(Triangle, triangle[1], triangle[2], triangle[3], triangle[4]))
-            start_offs_s[i][0] = triangle[1]
+            type = Triangle; m = 1
         else:
-            triangle = triangles[0]
-            shapes.append(shape_at(SharpTriangle, triangle[1], triangle[2], triangle[3], triangle[4]))
-            start_offs_s[i-1][1] = triangle[1]*2
-            triangle = triangles[1]
-            shapes.append(shape_at(SharpTriangle, triangle[1], triangle[2], triangle[3], triangle[4]))
-            end_offs_s[i][0] = triangle[1]*2
+            type = SharpTriangle; m = 2
+        triangle = triangles[0]
+        shapes.append(shape_at(type, triangle[1], triangle[2], triangle[3], triangle[4]))
+        start_offs_s[i][1] = triangle[1]*m
+        triangle = triangles[1]
+        shapes.append(shape_at(type, triangle[1], triangle[2], triangle[3], triangle[4]))
+        start_offs_s[(i+1)%len(start_offs_s)][0] = triangle[1]*m
     for i, triangles in enumerate(e_triangles):
         if not triangles: continue
         if triangles[0][0] == "triangle":
-            triangle = triangles[0]
-            shapes.append(shape_at(Triangle, triangle[1], triangle[2], triangle[3], triangle[4]))
-            end_offs_s[i-1][1] = triangle[1]
-            triangle = triangles[1]
-            shapes.append(shape_at(Triangle, triangle[1], triangle[2], triangle[3], triangle[4]))
-            end_offs_s[i][0] = triangle[1]
+            type = Triangle; m = 1
         else:
-            triangle = triangles[0]
-            shapes.append(shape_at(SharpTriangle, triangle[1], triangle[2], triangle[3], triangle[4]))
-            end_offs_s[i-1][1] = triangle[1]*2
-            triangle = triangles[1]
-            shapes.append(shape_at(SharpTriangle, triangle[1], triangle[2], triangle[3], triangle[4]))
-            end_offs_s[i][0] = triangle[1]*2
+            type = SharpTriangle; m = 2
+        triangle = triangles[0]
+        shapes.append(shape_at(type, triangle[1], triangle[2], triangle[3], triangle[4]))
+        end_offs_s[i][1] = triangle[1]*m
+        triangle = triangles[1]
+        shapes.append(shape_at(type, triangle[1], triangle[2], triangle[3], triangle[4]))
+        end_offs_s[(i+1)%len(end_offs_s)][0] = triangle[1]*m
+    for i, (s_offs, e_offs) in enumerate(zip(start_offs_s, end_offs_s)):
+        still_space = find_edge_placement(start_corners, end_corners, i, s_offs, e_offs)
+        while still_space:
+            scale, s_pos, e_pos, s_offs[:], e_offs[:] = still_space
+            s_rot, e_rot = angle(start_corners[i-1], start_corners[i]), angle(end_corners[i-1], end_corners[i])
+            shapes.append(shape_at(Square, smallest_scale*scale, s_pos, s_rot))
+            shapes.append(shape_at(Square, smallest_scale*scale, e_pos, e_rot))
+            still_space = find_edge_placement(start_corners, end_corners, i, s_offs, e_offs)
     return shapes
 
 if __name__ == "__main__":

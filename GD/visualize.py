@@ -85,7 +85,9 @@ class Screen:
             self.l_v_list.draw(pyglet.gl.GL_LINES)
             # draw polygons
             for polygon in collapse(self.temp_polygons):
-                pyglet.graphics.draw(len(polygon), pyglet.gl.GL_TRIANGLE_FAN, ('v2f', collapse(polygon)))
+                for i, p2 in enumerate(polygon):
+                    p1 = polygon[i-1]
+                    pyglet.graphics.draw(2, pyglet.gl.GL_LINES, ('v2f', p1+p2))
         
         @self.window.event
         def on_key_press(symbol, modifiers):
