@@ -1,6 +1,6 @@
 from PIL import Image, ImageDraw
 from PIL.ImageOps import flip
-from util import collapse, nest_map
+from util import collapse, nest_map, bounds
 import pyglet
 import math
 
@@ -29,17 +29,7 @@ class Img:
         self.img.show()
 
 def quickdraw(lines=[], polygons=[]):
-    min_x, min_y, max_x, max_y = 1<<31, 1<<31, -(1<<31), -(1<<31)
-    for p in collapse(lines):
-        if p[0] < min_x: min_x = p[0]
-        if p[1] < min_y: min_y = p[1]
-        if p[0] > max_x: max_x = p[0]
-        if p[1] > max_y: max_y = p[1]
-    for p in collapse(polygons):
-        if p[0] < min_x: min_x = p[0]
-        if p[1] < min_y: min_y = p[1]
-        if p[0] > max_x: max_x = p[0]
-        if p[1] > max_y: max_y = p[1]
+    min_x, min_y, max_x, max_y = bounds(lines + polygons)
     max_bound, min_bound = max(max_x, max_y), min(min_x, min_y)
     mult = 2000/(max_bound-min_bound)
     s = Img(2048)
@@ -83,11 +73,15 @@ class Screen:
             self.l_v_list.resize(len(self.lines)*2)
             self.l_v_list.vertices = collapse(collapse(self.lines))
             self.l_v_list.draw(pyglet.gl.GL_LINES)
-            # draw polygons
-            for polygon in collapse(self.temp_polygons):
-                for i, p2 in enumerate(polygon):
-                    p1 = polygon[i-1]
-                    pyglet.graphics.draw(2, pyglet.gl.GL_LINES, ('v2f', p1+p2))
+            # draw polygons (choice between solid and outline)
+            if False:
+                for polygon in collapse(self.temp_polygons): 
+                    pyglet.graphics.draw(len(polygon), pyglet.gl.GL_TRIANGLE_FAN, ('v2f', collapse(polygon)))
+            else:
+                for polygon in collapse(self.temp_polygons):
+                    for i, p2 in enumerate(polygon):
+                        p1 = polygon[i-1]
+                        pyglet.graphics.draw(2, pyglet.gl.GL_LINES, ('v2f', p1+p2))
         
         @self.window.event
         def on_key_press(symbol, modifiers):

@@ -122,41 +122,75 @@ def straight_skeleton(polygon)->"tuple[list,list]":
         i1, i2 = polygon.index(p1), polygon.index(p2)
         if len(polygon)-1 in [i1, i2] and 0 in [i1, i2]: edges.append(0)
         else: edges.append(max(i1, i2))
-    return polygons, edges
+    # sort polygons into matching order
+    ret = [[] for _ in polygons]
+    for i, index in enumerate(edges):
+        ret[index] = polygons[i]
+    return ret
+
+def miter(polygon, distance, pointy=False, amount=8):
+    """Returns a mitered polygon of the given distance."""
+    offset = pc.PyclipperOffset(miter_limit=amount)
+    if not pointy: join_type = pc.JT_SQUARE
+    else: join_type = pc.JT_MITER
+    offset.AddPath(pc.scale_to_clipper(polygon), join_type, pc.ET_CLOSEDPOLYGON)
+
+    ret = offset.Execute(pc.scale_to_clipper(distance))
+    return pc.scale_from_clipper(ret)
+
+def clean(polygon):
+    """Returns a polygon with very close vertices merged."""
+    # miter then unmiter to remove thin bits
+    m = miter(polygon, -1/10000, pointy=True, amount=2**31)
+    if not m: return []
+    polygon = miter(m[0], 1/10000, pointy=True, amount=2**31)[0]
+    return pc.scale_from_clipper(pc.CleanPolygon(pc.scale_to_clipper(polygon), 16))
 
 def poly_intersection(polygon1, polygon2)->"list":
     """Returns the polygon created by the intersection of the two polygons."""
+    if not polygon1 or not polygon2: return []
+    # miter the polygons a bit because this thing can't even do its job properly
+    polygon1 = miter(polygon1, 1/10000, True)[0]
+    polygon2 = miter(polygon2, 1/10000, True)[0]
     clipper = pc.Pyclipper()
     clipper.AddPath(pc.scale_to_clipper(polygon1), pc.PT_SUBJECT, True)
     clipper.AddPath(pc.scale_to_clipper(polygon2), pc.PT_CLIP, True)
 
     ret = clipper.Execute(pc.CT_INTERSECTION, pc.PFT_EVENODD, pc.PFT_EVENODD)
-    ret = pc.scale_from_clipper(ret)
+    ret: list = pc.scale_from_clipper(ret)
 
     # didn't overlap
     if ret == []:
         return ret
     # holes
     if len(ret) > 1:
-        raise Exception("Shapes created a hole")
-    return ret[0]
+        # return biggest polygon
+        ret.sort(key=lambda x: abs(area(x)), reverse=True)
+    return clean(ret[0])
 
-def poly_subtraction(polygon, subtracted_polygon)->"list":
-    """Returns the polygon created by subtracting the second polygon from the first."""
+def poly_subtraction(polygon, subtracted_polygons: list)->"list":
+    """Returns the polygon created by subtracting the list of polygons from the first polygon."""
+    if not polygon or not subtracted_polygons: return polygon
     clipper = pc.Pyclipper()
     clipper.AddPath(pc.scale_to_clipper(polygon), pc.PT_SUBJECT, True)
-    clipper.AddPath(pc.scale_to_clipper(subtracted_polygon), pc.PT_CLIP, True)
+    for sub_poly in subtracted_polygons:
+        # miter the subtracted polygons a bit because this thing can't even do its job properly
+        sub_poly = miter(sub_poly, 1/1000, True)[0]
+        clipper.AddPath(pc.scale_to_clipper(sub_poly), pc.PT_CLIP, True)
 
-    ret = clipper.Execute(pc.CT_DIFFERENCE, pc.PFT_EVENODD, pc.PFT_EVENODD)
-    ret = pc.scale_from_clipper(ret)
+    ret = clipper.Execute(pc.CT_DIFFERENCE, pc.PFT_NONZERO, pc.PFT_NONZERO)
+    ret: list = pc.scale_from_clipper(ret)
 
     # nothing left
     if ret == []:
         return ret
     # holes
     if len(ret) > 1:
-        print("Shapes created a hole")
-    return ret[0]
+        # return biggest polygon
+        ret.sort(key=lambda x: abs(area(x)), reverse=True)
+    # ensure ret is a shape
+    if abs(area(ret[0])) < 1/10000: return []
+    return clean(ret[0])
 
 def poly_center(polygon)->"tuple[float, float]":
     """Finds the centroid for the given polygon."""
@@ -190,7 +224,9 @@ def line_clip(line, clip)->"list":
         return []
     # holes
     if len(ret) > 1:
-        raise Exception("Shapes created a hole")
+        print("Shapes created a hole")
+        # return longest line
+        ret.sort(key=lambda x: math.dist(x[0],x[1]), reverse=True)
     # make sure the line is in the same direction
     a1 = angle(line[0], line[1])
     a2 = angle(ret[0][0], ret[0][1])
@@ -212,22 +248,6 @@ def line_subtraction(line, subtracted_line):
     sub_line =  [[moved_sub_end[0], moved_line_end[1]], moved_line_end]
     # rotate the result back to its original angle
     return [rot_around(sub_line[0], line[0], a), rot_around(sub_line[1], line[0], a)]
-
-def miter(polygon, distance, pointy=False):
-    """Returns a mitered polygon of the given distance."""
-    offset = pc.PyclipperOffset(miter_limit=5)
-    if not pointy: join_type = pc.JT_SQUARE
-    else: join_type = pc.JT_MITER
-    offset.AddPath(pc.scale_to_clipper(polygon), join_type, pc.ET_CLOSEDPOLYGON)
-
-    ret = offset.Execute(pc.scale_to_clipper(distance))
-    return pc.scale_from_clipper(ret)
-
-def clean(polygon):
-    """Returns a polygon with very close vertices merged."""
-    # miter then unmiter to remove thin bits
-    polygon = miter(miter(polygon, -0.01, pointy=True)[0], 0.01, pointy=True)[0]
-    return pc.scale_from_clipper(pc.CleanPolygon(pc.scale_to_clipper(polygon), 16))
 
 def on_edge(polygon, edge_polygon, other_edge_polygons: list)->"bool":
     """Returns whether or not a polygon contains an edge of another polygon."""
@@ -302,8 +322,8 @@ def miter_edge(polygon, square_side_length, edge_index):
     # make the polygon clockwise and update the edge index if needed
     if area(polygon) < 0: polygon = polygon[::-1]; edge_index = len(polygon) - edge_index - 1
     # get the part of the straight skeleton with the edge
-    skel, edges = straight_skeleton(polygon)
-    edge_poly = skel[edges.index(edge_index)]
+    skel = straight_skeleton(polygon)
+    edge_poly = skel[edge_index]
     # get basic miter
     mits = miter(polygon, -square_side_length/2, pointy=True)
     for mit in mits:
@@ -377,6 +397,7 @@ def offset_miter(polygon, square_side_length):
     return ret_polygon
 
 if __name__ == "__main__":
+    #new_poly = poly_subtraction([[1,1],[4,2],[3,3],[0,3]],[[5,5]])
     shape = [[4, 3], [6, 7], [5, 10], [8, 9], [8, 4], [6, 4]][::-1]
     shape = [[10, 14], [6, 14], [8, 12], [3, 12], [3, 5], [5, 3], [10, 4], [11, 5]][::-1]
     #shape = [[1, 1], [14, 1], [14, 5], [8, 5], [7.5, 1.2], [7, 5], [1, 5]]
@@ -390,17 +411,17 @@ if __name__ == "__main__":
     #shape = [[10, 1], [9, 7], [7, 7], [6, 3], [5, 7], [3, 7], [2, 1]]
     shape = [[6, 5], [5, 10], [10, 10], [12, 5]]
     #shape = [[2, 2], [9, 2], [7, 7], [2.1, 3]]
-    shape = [[3, 2], [2.5, 3], [7, 5], [9, 2]][::-1]
-    polygons, edges = straight_skeleton(shape)
+    #shape = [[3, 2], [2.5, 3], [7, 5], [9, 2]][::-1]
+    polygons = straight_skeleton(shape)
     img = Img(2048)
     scale = 128
     shape = pc.scale_to_clipper(shape, scale)
     img.draw_polygon(shape, width=5, outline=[0,0,0])
-    l = offset_miter_edge(shape, 128*2, 1, "triangle", True)
+    l = offset_miter_edge(shape, 128*2, 0, "square")
     img.draw_line(l)
     from base_shapes import *
-    img.draw_polygon(shape_at(Triangle, 256, l[0], angle(shape[1], shape[2]), True))
-    img.draw_polygon(shape_at(Triangle, 256, l[1], angle(shape[1], shape[2]), True))
+    #img.draw_polygon(shape_at(Triangle, 256, l[0], angle(shape[1], shape[2]), True))
+    #img.draw_polygon(shape_at(Triangle, 256, l[1], angle(shape[1], shape[2]), True))
     #p = offset_miter(shape, 256)
     #img.draw_polygon(p)
     for p in polygons:

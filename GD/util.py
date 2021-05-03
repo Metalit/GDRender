@@ -49,6 +49,15 @@ def collapse(to_collapse: list):
         l += ele
     return l
 
+def bounds(shapes):
+    min_x, min_y, max_x, max_y = 1<<31, 1<<31, -(1<<31), -(1<<31)
+    for p in collapse(shapes):
+        if p[0] < min_x: min_x = p[0]
+        if p[1] < min_y: min_y = p[1]
+        if p[0] > max_x: max_x = p[0]
+        if p[1] > max_y: max_y = p[1]
+    return min_x, min_y, max_x, max_y
+
 def circle(center):
     rt2 = math.sqrt(2)/2
     base = deepcopy([[1,0],[rt2,-rt2],[0,-1],[-rt2,-rt2],[-1,0],[-rt2,rt2],[0,1],[rt2,rt2]])
