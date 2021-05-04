@@ -4,7 +4,7 @@ from copy import deepcopy
 import math
 
 # in case it ever changes
-smallest_scale = 5
+smallest_scale = 2
 one_block = 30
 screen_res_x, screen_res_y = 750, 390
 
@@ -48,7 +48,7 @@ class Shape:
 
 class Line(Shape):
 
-    base_corners = [[-2.5, 0], [2.5, 0]] # corners with center at 0, 0 at min scale
+    base_corners = [[-smallest_scale/2, 0], [smallest_scale/2, 0]] # corners with center at 0, 0 at min scale
 
     def __init__(self, center: "tuple[int, int]", color: int, group):
         super().__init__(center, 1, color, group)
@@ -57,31 +57,31 @@ class Line(Shape):
 
 class SharpTriangle(Shape):
 
-    base_corners = [[-5, -2.5], [5, -2.5], [5, 2.5]] # corners with center at 0, 0
+    base_corners = [[-smallest_scale, -smallest_scale/2], [smallest_scale, -smallest_scale/2], [smallest_scale, smallest_scale/2]] # corners with center at 0, 0
 
     # generate a new object with various properties
     def __init__(self, center: "tuple[int, int]", side_length: int, color: int, group: "list[int]", flip: bool):
         super().__init__(center, side_length, color, group)
         self.flip = flip
-        if flip: self.base_corners = [[-5, -2.5], [5, -2.5], [-5, 2.5]]
+        if flip: self.base_corners = [[-smallest_scale, -smallest_scale/2], [smallest_scale, -smallest_scale/2], [-smallest_scale, smallest_scale/2]]
         self.string = solid_object(694, center, scale=one_block/side_length, color=color, groups=[1, group], flipx=flip)
         self.type = "sharp_triangle"
 
 class Triangle(Shape):
 
-    base_corners = [[-2.5, -2.5], [2.5, -2.5], [2.5, 2.5]] # corners with center at 0, 0
+    base_corners = [[-smallest_scale/2, -smallest_scale/2], [smallest_scale/2, -smallest_scale/2], [smallest_scale/2, smallest_scale/2]] # corners with center at 0, 0
 
     # generate a new object with various properties
     def __init__(self, center: "tuple[int, int]", side_length: int, color: int, group: "list[int]", flip: bool):
         super().__init__(center, side_length, color, group)
         self.flip = flip
-        if flip: self.base_corners = [[-2.5, -2.5], [2.5, -2.5], [-2.5, 2.5]]
+        if flip: self.base_corners = [[-smallest_scale/2, -smallest_scale/2], [smallest_scale/2, -smallest_scale/2], [-smallest_scale/2, smallest_scale/2]]
         self.string = solid_object(693, center, scale=one_block/side_length, color=color, groups=[1, group], flipx=flip)
         self.type = "triangle"
 
 class Square(Shape):
     
-    base_corners = [[-2.5, -2.5], [2.5, -2.5], [2.5, 2.5], [-2.5, 2.5]] # corners with center at 0, 0
+    base_corners = [[-smallest_scale/2, -smallest_scale/2], [smallest_scale/2, -smallest_scale/2], [smallest_scale/2, smallest_scale/2], [-smallest_scale/2, smallest_scale/2]] # corners with center at 0, 0
 
     def __init__(self, center: "tuple[int, int]", side_length, color: int, group: "list[int]"):
         super().__init__(center, side_length, color, group)

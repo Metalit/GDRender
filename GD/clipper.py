@@ -307,7 +307,7 @@ def offset_of_type(square_side_length, point1, point2, point3, type, mit_p2=None
     # x value of the edge of a square in the corner
     line_x = point2[0] - square_side_length/math.tan(angle_dif)
     if type == "sharp_triangle":
-        if angle_dif >= math.pi/8: return mit_x - align_x + square_side_length/2
+        if angle_dif >= 0.463647609: return mit_x - align_x + square_side_length/2
         return mit_x - (line_x + square_side_length)
     elif type == "triangle":
         if angle_dif >= math.pi/4: return mit_x - align_x

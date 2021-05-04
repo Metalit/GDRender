@@ -9,7 +9,7 @@ def find_corner_triangles(start_corners, end_corners):
     for i, (s_p3, e_p3) in enumerate(zip(start_corners, end_corners)):
         s_p1, s_p2 = start_corners[i-2], start_corners[i-1]
         e_p1, e_p2 = end_corners[i-2], end_corners[i-1]
-        if angle_leq(s_p1, s_p2, s_p3, 22.4999, degrees=True) or angle_leq(e_p1, e_p2, e_p3, 22.4999, degrees=True): # needs smallest triangle
+        if angle_leq(s_p1, s_p2, s_p3, 0.46364, degrees=False) or angle_leq(e_p1, e_p2, e_p3, 22.4999, degrees=True): # needs smallest triangle
             # find placement for triangle
             s_off_e1 = offset_miter_edge(start_corners, smallest_scale, (i-1)%len(start_corners), "sharp_triangle")
             s_off_e2 = offset_miter_edge(start_corners, smallest_scale, i, "sharp_triangle", True)
@@ -140,8 +140,10 @@ def maximize_area(scale, start_position, rotation, search_space, shape_to_fill):
     position = list(start_position)
     valid_start = abs(area(poly_intersection(shape_at(Square, scale, position, rotation), shape_to_fill))) > 1/10000
     # loop over all values in a grid, spaced in increments of bounds_search, that are inside the search space to find a starting position containing area
-    min_x, min_y, max_x, max_y = bounds([search_space])
-    x_m, y_m = 0, 0
+    if not valid_start:
+        min_x, min_y, max_x, max_y = bounds([search_space])
+        x_m, y_m = 0, 0
+        position = [min_x, min_y]
     while not valid_start:
         # increment x
         position[0] = min_x + bounds_search*x_m; x_m += 1
@@ -153,11 +155,19 @@ def maximize_area(scale, start_position, rotation, search_space, shape_to_fill):
         if position[1] > max_y:
             return False
         # check if now valid
+        if not inside(position, search_space): continue
         valid_start = abs(area(poly_intersection(shape_at(Square, scale, position, rotation), shape_to_fill))) > 1/10000
     # find center
     centroid = poly_center(shape_to_fill)
     # starting area
+    min_mult = 0.99; max_mult = 1.01
+    ideal_dist = math.sqrt(abs(area(shape_to_fill)))/2
     ret_area = abs(area(poly_intersection(shape_at(Square, scale, position, rotation), shape_to_fill)))
+    # weight area based on distance from center
+    dist = math.dist(position, centroid)
+    # if dist = 0: ret_area *= min_mult, if dist = ideal_dist: ret_area *= 1, if dist -> infinity: ret_area *= max_mult
+    b = 1/(max_mult-min_mult); a = 1/(max_mult-1) - b
+    ret_area *= (-ideal_dist)/(a*dist+b*ideal_dist) + max_mult
     search = next(searches)
     while search:
         # check the new area in each direction and use the position if greater
@@ -168,15 +178,13 @@ def maximize_area(scale, start_position, rotation, search_space, shape_to_fill):
             new_area = abs(area(poly_intersection(shape_at(Square, smallest_scale*scale, new_pos, rotation), shape_to_fill)))
             # weight area based on distance from center
             dist = math.dist(position, centroid)
-            min_mult = 0.9; max_mult = 1.1
             # if dist = 0: ret_area *= min_mult, if dist = ideal_dist: ret_area *= 1, if dist -> infinity: ret_area *= max_mult
-            ideal_dist = math.sqrt(abs(area(shape_to_fill)))/2
             b = 1/(max_mult-min_mult); a = 1/(max_mult-1) - b
             new_area *= (-ideal_dist)/(a*dist+b*ideal_dist) + max_mult
             # compare areas of old and new positions
             if new_area > ret_area: ret_area = new_area; position = new_pos; break
         # move to a smaller search if all directions areas are smaller
-        search = next(searches, False)
+        else: search = next(searches, False)
     if ret_area < 1/10000: return False
     return position
 
@@ -246,6 +254,7 @@ def find_inner_placements(start_corners, end_corners, start_minus_corners, end_m
                 new_shape += [min_point[0], end_rot]
             placed_shapes.append(new_shape)
             break
+        else: return False
     return placed_shapes, mult
 
 class Combination:
@@ -302,18 +311,19 @@ def find_shapes(start_corners, end_corners):
     start_minus_corners, end_minus_corners = miter(start_corners, -smallest_scale, True), miter(end_corners, -smallest_scale, True)
     start_minus_corners, end_minus_corners = poly_subtraction(start_corners, start_shapes), poly_subtraction(end_corners, end_shapes)
     if start_minus_corners or end_minus_corners:
-        placements, scale = find_inner_placements(start_corners, end_corners, start_minus_corners, end_minus_corners)
-        for placement in placements:
-            start_shapes.append(shape_at(Square, smallest_scale*scale, placement[0], placement[1]))
-            end_shapes.append(shape_at(Square, smallest_scale*scale, placement[2], placement[3]))
+        inners = find_inner_placements(start_corners, end_corners, start_minus_corners, end_minus_corners)
+        if inners:
+            placements, scale = inners
+            for placement in placements:
+                start_shapes.append(shape_at(Square, smallest_scale*scale, placement[0], placement[1]))
+                end_shapes.append(shape_at(Square, smallest_scale*scale, placement[2], placement[3]))
     return start_shapes + end_shapes
 
 if __name__ == "__main__":
-    big_corners = [[30, 30], [30, 75], [75, 75], [75, 30]]
-    big_shape = Combination(big_corners, max_corners=big_corners)
+    big_corners = [[30, 30], [30, 75], [75, 75], [80, 55], [75, 30]]
     s = Screen(500)
-    s.add_polygons([big_corners, [[150, 120], [150, 165], [225, 201], [225, 126]]])
+    s2 = Screen(500)
+    s.add_polygons([big_corners, [[150, 120], [150, 165], [200, 225], [225, 201], [225, 126]]])
     s.add_poly_method(lambda x: find_shapes(x[0], x[1]), ((0,0),(0,1)))
-    s.add_poly_method(lambda x: find_shapes(x[0], x[1]), ((0,0),(0,1),(1,0),(1,1)))
     run_screens()
     #start_pos, start_rot, end_pos, end_rot = big_shape.find_placement(rect, [[10, 0], [10, 15], [25, 17], [25, 2]])
