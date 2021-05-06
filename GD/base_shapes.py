@@ -4,7 +4,7 @@ from copy import deepcopy
 import math
 
 # in case it ever changes
-smallest_scale = 2
+smallest_scale = 5
 one_block = 30
 screen_res_x, screen_res_y = 750, 390
 

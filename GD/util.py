@@ -106,7 +106,7 @@ def area(polygon)->"int":
 def angle_leq(point1, point2, point3, max_angle=math.pi, degrees=False)->"bool":
     """Returns if an angle is less than or equal to the given degrees, defaulting to 180.
 
-    Requires the points to be in clockwise order around the polygon."""
+    Requires the points to be in clockwise order."""
     if degrees: max_angle = math.radians(max_angle)
     # rotate around p2 such that p2-p1 line is pointing to the right
     a = angle(point2, point1)

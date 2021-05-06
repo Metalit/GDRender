@@ -130,6 +130,7 @@ def straight_skeleton(polygon)->"tuple[list,list]":
 
 def miter(polygon, distance, pointy=False, amount=8):
     """Returns a mitered polygon of the given distance."""
+    if not polygon: return polygon
     offset = pc.PyclipperOffset(miter_limit=amount)
     if not pointy: join_type = pc.JT_SQUARE
     else: join_type = pc.JT_MITER
@@ -291,7 +292,7 @@ def inside(point, polygon)->"bool":
 def offset_of_type(square_side_length, point1, point2, point3, type, mit_p2=None, reverse=False)->"float":
     """Finds the offset from a miter that a shape would require to fit in the corner made by the given three points.
     
-    The points must be in clockwise order around the polygon."""
+    The points must be in clockwise order around the polygon, or counterclockwise if reverse == True."""
     # rotate around p2 such that p1-p2 line is horizontal
     a = angle(point1, point2)
     point1, point2, point3 = [rot_around(p, point2, -a) for p in [point1,point2,point3]]
@@ -382,13 +383,19 @@ def offset_miter(polygon, square_side_length):
     ret_polygon = []
     # add each edge to the new polygon
     for i, edge2 in enumerate(edges):
-        edge1 = edges[i-1]
-        # no previous edge
-        if not edge1 or not edge2: ret_polygon += edge2; continue
-        # no offset
-        if close_enough(edge1[1], edge2[0]): ret_polygon += [edge2[1]]
+        if not edge2: continue
+        # find last edge
+        j = 1
+        edge1 = edges[i-j]
+        while not edge1:
+            j += 1
+            edge1 = edges[i-j]
+        if close_enough(edge1, edge2): return []
+        # parallel, somehow
         inter = intersection(edge1, edge2)
-        if not inter: ret_polygon += [edge2[1]]
+        if not inter: ret_polygon += edge2
+        # no offset
+        elif close_enough(edge1[1], edge2[0]): ret_polygon.append(edge2[1])
         else:
             dist = math.dist(edge1[1], inter)
             # find the point the offset distance inside the polygon
